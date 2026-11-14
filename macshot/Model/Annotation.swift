@@ -1785,7 +1785,9 @@ class Annotation {
                 let disc = b * b - 4 * a * c
                 guard a > 0, disc >= 0 else { return innerBase }
                 let root = sqrt(disc)
-                let candidates = [(-b - root) / (2 * a), (-b + root) / (2 * a)]
+                let tNear = (-b - root) / (2 * a)
+                let tFar = (-b + root) / (2 * a)
+                let candidates = [tNear, tFar]
                     .filter { $0 >= 0 && $0 <= 1 }
                     .sorted()
                 guard let t = candidates.first else { return innerBase }

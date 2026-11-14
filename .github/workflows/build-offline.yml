@@ -29,25 +29,23 @@ jobs:
           sudo xcode-select -s "$XC/Contents/Developer"
           xcodebuild -version
 
-      - name: Cache SwiftPM dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('macshot.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: ${{ runner.os }}-spm-
-
-      - name: Resolve SPM packages
+      # The project needs Swift 6.2's default-@MainActor isolation but builds
+      # against the macOS 15 SDK. macos-15 runners ship Xcode 16.x (Swift 6.1),
+      # so install the swift.org 6.2 toolchain (user dir — no sudo needed).
+      - name: Install Swift 6.2 toolchain
         run: |
-          xcodebuild \
-            -project macshot.xcodeproj \
-            -scheme macshot \
-            -configuration Release \
-            -derivedDataPath build \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            -resolvePackageDependencies
+          curl -sL -o /tmp/swift62.pkg \
+            "https://download.swift.org/swift-6.2.1-release/xcode/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-osx.pkg"
+          pkgutil --expand-full /tmp/swift62.pkg /tmp/swift62
+          TC=~/Library/Developer/Toolchains/swift-6.2.1-RELEASE.xctoolchain
+          mkdir -p "$TC"
+          mv /tmp/swift62/swift-6.2.1-RELEASE-osx-package.pkg/Payload/usr "$TC/usr"
+          mv /tmp/swift62/swift-6.2.1-RELEASE-osx-package.pkg/Payload/Info.plist "$TC/Info.plist"
+          echo "TOOLCHAINS=$(defaults read "$TC/Info" CFBundleIdentifier)" >> "$GITHUB_ENV"
 
+      # Xcode 16 drops SWIFT_DEFAULT_ACTOR_ISOLATION silently, so the flag goes
+      # straight to the frontend. -disable-round-trip-debug-types works around
+      # a 6.2.1 swift-frontend assertion on SIL box debug types.
       - name: Build offline app
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -66,16 +64,20 @@ jobs:
             MACSHOT_PRODUCT_NAME="macshot Offline" \
             INFOPLIST_KEY_CFBundleDisplayName="macshot Offline" \
             INFOPLIST_KEY_CFBundleName="macshot Offline" \
+            OTHER_SWIFT_FLAGS="-Xfrontend -default-isolation -Xfrontend MainActor -Xfrontend -disable-round-trip-debug-types" \
             build
 
       # Ad-hoc signature: gives the binary a stable identity so TCC grants
       # (Screen Recording, etc.) survive relaunches. No Apple Developer
       # account needed; Gatekeeper still requires right-click → Open once.
+      # Entitlements must be embedded explicitly — without them the app
+      # would run unsandboxed.
       - name: Ad-hoc sign
         run: |
           APP="build/Build/Products/Release/macshot Offline.app"
-          codesign --force --deep --sign - "$APP"
-          codesign --verify --verbose "$APP"
+          codesign --force --sign - "$APP/Contents/XPCServices/macshotOCR.xpc"
+          codesign --force --sign - --entitlements macshot/macshot.entitlements "$APP"
+          codesign --verify --deep --strict --verbose "$APP"
 
       # Hard gate: prove the binary cannot initiate network connections.
       - name: Verify offline guarantees

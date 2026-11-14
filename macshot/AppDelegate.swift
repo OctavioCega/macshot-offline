@@ -4,7 +4,6 @@ import ServiceManagement
 import UniformTypeIdentifiers
 import AVFoundation
 import Vision
-import WebP
 
 enum CaptureMenuItemID: String, CaseIterable {
     case captureArea = "captureArea"
@@ -2586,16 +2585,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openImageFile(url: URL) {
-        let image: NSImage
-        if url.pathExtension.lowercased() == "webp",
-           let data = try? Data(contentsOf: url),
-           let decoded = try? WebPDecoder().decode(toNSImage: data, options: WebPDecoderOptions()) {
-            image = decoded
-        } else if let loaded = NSImage(contentsOf: url) {
-            image = loaded
-        } else {
-            return
-        }
+        guard let image = NSImage(contentsOf: url) else { return }
         DetachedEditorWindowController.open(image: image)
     }
 
@@ -2670,7 +2660,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleOpenURLs(_ urls: [URL]) {
-        let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "tiff", "tif", "bmp", "gif", "heic", "heif", "webp", "icns"]
+        let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "tiff", "tif", "bmp", "gif", "heic", "heif", "icns"]
         let videoExtensions: Set<String> = ["mp4", "mov", "m4v"]
         for url in urls {
             if url.scheme == "macshot" {

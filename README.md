@@ -21,7 +21,10 @@ capture · Vision OCR · PII auto-redact · beautify · local history · on-devi
 translation (Apple, macOS 15+) · on-device speech captions.
 
 Removed vs upstream: cloud uploads (imgbb/Drive/S3), Sparkle auto-updates,
-Google Translate, OAuth — every feature that needed a connection.
+Google Translate, OAuth — every feature that needed a connection. Also removed
+the only third-party dependency (Swift-WebP/libwebp), so the fork has **zero
+external packages**; the only casualty is exporting still images as `.webp`
+(PNG/JPEG/HEIC/AVIF remain).
 
 ## Why it's actually offline
 
@@ -42,16 +45,24 @@ lsof -i -nP -p "$(pgrep -f 'macshot Offline')"                                  
 
 ## Build from source
 
-Requires Xcode 16.4+ (macOS 15 SDK):
+The project relies on Swift 6.2's default-`@MainActor` isolation, so it needs a
+**Swift 6.2+ toolchain** even though it builds against the macOS 15 SDK:
+
+1. Install any Xcode with the macOS 15 SDK (Xcode 16.4 works).
+2. If your Xcode is < 26, install a Swift 6.2+ toolchain from
+   [swift.org/install](https://www.swift.org/install/) — `build-local.sh`
+   detects it automatically in `~/Library/Developer/Toolchains`.
 
 ```bash
 ./build-local.sh   # builds, ad-hoc signs, runs the verification above, packs the DMG
 ```
 
-Compatibility note: upstream's macOS-26-only screenshot fast path
-(`SCScreenshotManager.captureScreenshot(rect:)`) was removed so the project
-builds with the macOS 15 SDK — the pre-26 capture path it fell back to is used
-everywhere, with identical results on macOS ≤15.
+Compatibility changes vs upstream (cosmetic, needed for the 15 SDK / Xcode 16):
+
+- Removed the macOS-26-only screenshot fast path — the standard pre-26 capture
+  path is used everywhere, identical on macOS ≤15.
+- Removed the Swift-WebP package (see Features note above).
+- `import _Translation_SwiftUI` + two small type-inference fixes for SDK 15.
 
 ## License
 

@@ -25,7 +25,7 @@ struct HistoryRecord: Codable, Sendable {
         guard id.count == 36, UUID(uuidString: id) != nil else {
             throw DecodingError.dataCorruptedError(forKey: .id, in: c, debugDescription: "Invalid history identifier")
         }
-        guard ["png", "jpg", "jpeg", "heic", "webp", "gif", "tiff", "tif"].contains(fileExtension.lowercased()) else {
+        guard ["png", "jpg", "jpeg", "heic", "gif", "tiff", "tif"].contains(fileExtension.lowercased()) else {
             throw DecodingError.dataCorruptedError(forKey: .fileExtension, in: c, debugDescription: "Invalid history image extension")
         }
         let date = c.decode(.timestamp, or: Date(timeIntervalSince1970: 0))

@@ -3,6 +3,7 @@ import NaturalLanguage
 import Combine
 import SwiftUI
 @preconcurrency import Translation
+import _Translation_SwiftUI
 
 enum TranslationService {
 

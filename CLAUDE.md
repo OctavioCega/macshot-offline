@@ -13,6 +13,19 @@
 > macOS-26-only screenshot fast path (`SCScreenshotManager.captureScreenshot(rect:)`,
 > `SCScreenshotConfiguration`, `SCScreenshotOutput`) was removed — the
 > content-filter path it fell back to now runs everywhere.
+>
+> **Toolchain note:** the project relies on Swift 6.2's default-`@MainActor`
+> isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION`), so it needs a **Swift 6.2+
+> toolchain** even against the 15 SDK. On Xcode < 26 install a swift.org 6.2+
+> toolchain into `~/Library/Developer/Toolchains`; `build-local.sh` and the CI
+> workflow then pass `TOOLCHAINS=<id>` and forward `-default-isolation
+> MainActor` via `OTHER_SWIFT_FLAGS` (Xcode 16 drops the build setting
+> silently). `-Xfrontend -disable-round-trip-debug-types` works around a 6.2.1
+> frontend assertion on SIL box debug types.
+>
+> **No dependencies:** the Swift-WebP/libwebp package was removed (this fork
+> has zero SwiftPM packages) — `.webp` still-image export is gone; PNG/JPEG/
+> HEIC/AVIF remain.
 
 Native macOS screenshot & annotation tool inspired by Flameshot. Built with Swift + AppKit. No Qt, no Electron.
 
@@ -74,7 +87,7 @@ macshot/
 │   └── VideoCaptionTranscriber.swift  # On-device speech → caption words
 │
 ├── Services/
-│   ├── ImageEncoder.swift              # PNG/JPEG/HEIC/WebP encoding, clipboard copy, resolution scaling
+│   ├── ImageEncoder.swift              # PNG/JPEG/HEIC/AVIF encoding, clipboard copy, resolution scaling
 │   ├── MacshotProjectFile.swift        # .macshot editable project: snapshot, atomic write, lenient read
 │   ├── BeautifyRenderer.swift          # Gradient frame / background beautification (linear + mesh gradients)
 │   ├── AutoRedactor.swift              # PII regex detection + Vision OCR → redaction annotations
@@ -291,7 +304,7 @@ The video editor is built around `VideoEditorDocument` (one `VideoProject`: time
 - Output: `saveDirectory`, `quickCaptureMode`, `copyPathAfterSave`, `playCopySound`, `pinPlacement` (0 = screen center, 1 = original capture position; only overlay pins have a capture position)
 - Selection: `lastSelectionRect`, `lastSelectionScreenFrame`, `rememberLastSelection`
 - Thumbnails: `showFloatingThumbnail`, `thumbnailStacking`, `thumbnailAutoDismissSeconds`
-- Image: `imageFormat` (png/jpeg/heic/webp/avif), `imageQuality` (0.0–1.0), `downscaleRetina` (bool), `clipboardIncludesImageFormat` (bool, opt-in: adds the configured format ahead of PNG/TIFF on the clipboard)
+- Image: `imageFormat` (png/jpeg/heic/avif), `imageQuality` (0.0–1.0), `downscaleRetina` (bool), `clipboardIncludesImageFormat` (bool, opt-in: adds the configured format ahead of PNG/TIFF on the clipboard)
 - Recording: `recordingFormat` (mp4/gif), `recordingFPS`, `recordingOnStop`
 - History: `historySize`
 - Tools: `enabledTools`, `knownToolRawValues`
@@ -329,7 +342,7 @@ Pencil, Line, Arrow, Rectangle, Filled Rectangle, Ellipse, Marker/Highlighter, T
 - **Stamp tool:** Place emoji or custom images, load from file
 
 ### Output Actions
-Copy to clipboard, Save to file (PNG/JPEG/HEIC/WebP), Pin (floating always-on-top), OCR with translation (30+ languages), Upload to imgbb or Google Drive (OAuth2), Remove background (VNGenerateForegroundInstanceMaskRequest), Open in editor, Beautify (30 gradient styles including 7 mesh gradients on macOS 15+), Flip horizontal/vertical
+Copy to clipboard, Save to file (PNG/JPEG/HEIC/AVIF), Pin (floating always-on-top), OCR with translation (30+ languages), Upload to imgbb or Google Drive (OAuth2), Remove background (VNGenerateForegroundInstanceMaskRequest), Open in editor, Beautify (30 gradient styles including 7 mesh gradients on macOS 15+), Flip horizontal/vertical
 
 ### Advanced
 - **Editor Window:** Standalone resizable window for post-capture editing, full annotation tools, zoom 0.1x–8x via NSScrollView
@@ -353,7 +366,7 @@ Copy to clipboard, Save to file (PNG/JPEG/HEIC/WebP), Pin (floating always-on-to
 - **Use proper AppKit components:** NSPopover for popovers, NSView subclasses for toolbar buttons and strips, NSSlider/NSSegmentedControl/NSButton for controls, NSScrollView for editor zoom/pan, NSTextView for text editing. Avoid reimplementing standard UI components with manual `draw()` + coordinate hit-testing.
 - **Strict concurrency:** CI builds with Xcode 16+ and `-Owholemodule` which enforces strict Swift concurrency. Any code using `@MainActor`-isolated SwiftUI APIs (e.g. `ImageRenderer`) must itself be `@MainActor`. Always mark classes/functions that touch SwiftUI rendering with `@MainActor`. Calling `@MainActor`-isolated methods (e.g. on AppDelegate) from non-`@MainActor` classes requires `MainActor.assumeIsolated { }`. **Local Debug builds do NOT catch these errors.** Before tagging a release, always verify with a Release build: `xcodebuild -scheme macshot -configuration Release build 2>&1 | grep "error:"`
 - **Tool handler pattern:** New annotation tools should implement `AnnotationToolHandler` protocol in `UI/Tools/`, not add switch cases to OverlayView. The handler's `start`/`update`/`finish` methods use `AnnotationCanvas` to access shared state.
-- Apple frameworks: ScreenCaptureKit, Vision, CoreImage, AVFoundation + Sparkle for auto-updates + Swift-WebP for WebP encoding
+- Apple frameworks only: ScreenCaptureKit, Vision, CoreImage, AVFoundation — no third-party packages in this fork
 - SF Symbols for toolbar icons
 - Minimal allocations during mouse tracking (reuse paths, avoid per-mouseMoved object creation)
 - `[weak self]` in all closures to avoid retain cycles
