@@ -4,6 +4,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Use the full Xcode even when xcode-select still points at Command Line Tools.
+if [ -d /Applications/Xcode.app ]; then
+  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+fi
+xcodebuild -version
+
 APP="build/Build/Products/Release/macshot Offline.app"
 VERSION="0.0.0-local"
 

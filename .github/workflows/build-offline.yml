@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-26        # Xcode 26 + macOS 26 SDK (NSGlassEffectView / Liquid Glass)
+    runs-on: macos-15        # Xcode 16.4 + macOS 15 SDK (this fork removed the macOS-26-only capture path)
     timeout-minutes: 60
 
     steps:
@@ -24,8 +24,7 @@ jobs:
 
       - name: Select Xcode
         run: |
-          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -z "$XC" ]; then XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1); fi
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
           echo "Using $XC"
           sudo xcode-select -s "$XC/Contents/Developer"
           xcodebuild -version

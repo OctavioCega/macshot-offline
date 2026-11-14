@@ -124,13 +124,10 @@ class ScreenCaptureManager {
     /// `showsCursor` is false, so the "Capture mouse cursor" toggle is honored
     /// for the enlarged cursor too.
     ///
-    /// On macOS 26+, first uses the rect-based screenshot API. That avoids
-    /// enumerating SCShareableContent in the hot path, while still freezing
-    /// trigger-time pixels before the overlay is ordered front. If that fails,
-    /// falls back to the older content-filter path, which fetches fresh
-    /// shareable content so transient UI present at hotkey time — open menus,
-    /// Spotlight/Raycast panels — is in the window list and gets captured.
-    /// Returns nil on any failure so the caller can fall back to the synchronous
+    /// Uses the content-filter path, which fetches fresh shareable content so
+    /// transient UI present at hotkey time — open menus, Spotlight/Raycast
+    /// panels — is in the window list and gets captured. Returns nil on any
+    /// failure so the caller can fall back to the synchronous
     /// CGWindowListCreateImage path.
     @available(macOS 14.0, *)
     static func captureAllScreensImmediatelySCK(
@@ -139,16 +136,6 @@ class ScreenCaptureManager {
         onCapture: ((ScreenCapture) -> Void)? = nil
     ) async -> [ScreenCapture]? {
         let showsCursor = UserDefaults.standard.bool(forKey: "captureCursor")
-        if #available(macOS 26.0, *) {
-            if let captures = await captureAllScreensImmediatelySCKRect(
-                showsCursor: showsCursor,
-                priorityScreen: priorityScreen,
-                timing: timing,
-                onCapture: onCapture
-            ) {
-                return captures
-            }
-        }
 
         timing?("SCK immediate: shareable content begin")
         guard
@@ -217,140 +204,6 @@ class ScreenCaptureManager {
             return nil
         }
         return captures
-    }
-
-    @available(macOS 26.0, *)
-    private static func captureAllScreensImmediatelySCKRect(
-        showsCursor: Bool,
-        priorityScreen: NSScreen? = nil,
-        timing: (@Sendable (String) -> Void)? = nil,
-        onCapture: ((ScreenCapture) -> Void)? = nil
-    ) async -> [ScreenCapture]? {
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else {
-            timing?("SCK rect immediate: no screens — fallback")
-            return nil
-        }
-
-        timing?("SCK rect immediate: begin screens=\(screens.count)")
-        // SCScreenshotManager.captureScreenshot(rect:) takes CoreGraphics display
-        // space: origin at the TOP-left of the primary display, y down. NSScreen
-        // frames are AppKit space: origin at the BOTTOM-left of the primary, y up.
-        // The two only coincide for the primary display — non-primary screens
-        // captured with the raw AppKit frame come back vertically shifted with a
-        // black stripe where the rect fell off the display (#291, #294).
-        guard let primaryScreen = screens.first else { return [] }
-        let primaryHeight = primaryScreen.frame.maxY
-        // NOTE: capture displays SEQUENTIALLY, not concurrently.
-        // On macOS 26 replayd serialises concurrent SCScreenshotManager requests
-        // anyway, and charges ~1.3s per queued request instead of ~380ms. On a
-        // 4-display Mac that is 3.9s concurrent vs 1.5s sequential (2.5x).
-        // Capture the cursor's display first and hand each capture back through
-        // onCapture the moment it lands, so the overlay on the display the user
-        // is looking at goes interactive after ONE capture, not after all of them.
-        var order = Array(screens.enumerated())
-        if let priority = priorityScreen,
-           let hit = order.firstIndex(where: { $0.element === priority }), hit != 0 {
-            let entry = order.remove(at: hit)
-            order.insert(entry, at: 0)
-            timing?("SCK rect: prioritised cursor display index=\(entry.offset)")
-        }
-        var captures: [ScreenCapture] = []
-        for (index, screen) in order {
-            let appKitFrame = screen.frame
-            let rect = CGRect(
-                x: appKitFrame.origin.x,
-                y: primaryHeight - appKitFrame.maxY,
-                width: appKitFrame.width,
-                height: appKitFrame.height)
-            let config = SCScreenshotConfiguration()
-            config.width = Int(rect.width * screen.backingScaleFactor)
-            config.height = Int(rect.height * screen.backingScaleFactor)
-            config.showsCursor = showsCursor
-            // Rectangle screenshots omit window framing by default on
-            // macOS 26. Preserve the shadows visible on the desktop.
-            config.ignoreShadows = false
-            config.displayIntent = .local
-            config.dynamicRange = .sdr
-            timing?("SCK rect capture begin screen=\(index) rect=\(Int(rect.origin.x)),\(Int(rect.origin.y)) \(Int(rect.width))x\(Int(rect.height))")
-            let result = await captureScreenshotOutput(rect: rect, configuration: config)
-            guard
-                result.error == nil,
-                let output = result.output,
-                let image = output.sdrImage ?? output.hdrImage
-            else {
-                let reason = result.error?.localizedDescription ?? "no image returned"
-                timing?("SCK rect capture failed screen=\(index) error=\(reason)")
-                continue
-            }
-            timing?("SCK rect capture end screen=\(index) pixels=\(image.width)x\(image.height)")
-            // On some setups (macOS 27, closed-lid MacBook, two 5K displays at
-            // 2x) the main display comes back as a full-size buffer with only
-            // the 1x content painted top-left. The content-filter path
-            // captures it correctly.
-            if isUnderPaintedCapture(image) {
-                timing?("SCK rect capture under-painted screen=\(index) pixels=\(image.width)x\(image.height), fallback")
-                return nil
-            }
-            let capture = ScreenCapture(screen: screen, image: image)
-            captures.append(capture)
-            onCapture?(capture)
-        }
-
-        guard captures.count == screens.count else {
-            timing?("SCK rect immediate: partial captures \(captures.count)/\(screens.count) — fallback")
-            return nil
-        }
-
-        timing?("SCK rect immediate: end")
-        return captures
-    }
-
-    /// True when a display capture has transparent pixels in its top-right,
-    /// bottom-left and bottom-right corners and inside its bottom-right
-    /// quadrant. A display is opaque everywhere, so this means the buffer is
-    /// larger than what was painted into it. The quadrant probe keeps a
-    /// display whose corners alone come back clear (rounded corners) from
-    /// being sent down the slower fallback on every capture.
-    /// Reads four pixels, not the whole buffer.
-    static func isUnderPaintedCapture(_ image: CGImage) -> Bool {
-        let width = image.width
-        let height = image.height
-        guard width > 0, height > 0 else { return true }
-        let probes = [(width - 1, 0), (0, height - 1), (width - 1, height - 1),
-                      (width * 3 / 4, height * 3 / 4)]
-        return probes.allSatisfy { alpha(of: image, x: $0.0, y: $0.1) == 0 }
-    }
-
-    /// Alpha of one pixel, `y` counted from the top. Nil if it can't be read.
-    private static func alpha(of image: CGImage, x: Int, y: Int) -> UInt8? {
-        guard let pixel = image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)) else { return nil }
-        var rgba = [UInt8](repeating: 0, count: 4)
-        let drawn = rgba.withUnsafeMutableBytes { buffer -> Bool in
-            guard let context = CGContext(
-                data: buffer.baseAddress, width: 1, height: 1,
-                bitsPerComponent: 8, bytesPerRow: 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-            else { return false }
-            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-            return true
-        }
-        return drawn ? rgba[3] : nil
-    }
-
-    @available(macOS 26.0, *)
-    private static func captureScreenshotOutput(
-        rect: CGRect,
-        configuration: SCScreenshotConfiguration
-    ) async -> (output: SCScreenshotOutput?, error: Error?) {
-        await withCheckedContinuation { continuation in
-            SCScreenshotManager.captureScreenshot(rect: rect, configuration: configuration) {
-                output,
-                error in
-                continuation.resume(returning: (output, error))
-            }
-        }
     }
 
     static func makeDisplayPreviewImage(from image: CGImage, maxPixelDimension: Int = 1400) -> CGImage {

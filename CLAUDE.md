@@ -8,6 +8,11 @@
 > updates, appcasts, signing/notarization or Homebrew publishing is **upstream
 > history** and does not apply here. This fork's only build workflow is
 > `.github/workflows/build-offline.yml` (unsigned/ad-hoc build + release).
+>
+> **SDK note:** this fork builds with the **macOS 15 SDK** (Xcode 16.4+). The
+> macOS-26-only screenshot fast path (`SCScreenshotManager.captureScreenshot(rect:)`,
+> `SCScreenshotConfiguration`, `SCScreenshotOutput`) was removed — the
+> content-filter path it fell back to now runs everywhere.
 
 Native macOS screenshot & annotation tool inspired by Flameshot. Built with Swift + AppKit. No Qt, no Electron.
 

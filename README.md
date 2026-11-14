@@ -42,11 +42,16 @@ lsof -i -nP -p "$(pgrep -f 'macshot Offline')"                                  
 
 ## Build from source
 
-Requires Xcode 26+:
+Requires Xcode 16.4+ (macOS 15 SDK):
 
 ```bash
 ./build-local.sh   # builds, ad-hoc signs, runs the verification above, packs the DMG
 ```
+
+Compatibility note: upstream's macOS-26-only screenshot fast path
+(`SCScreenshotManager.captureScreenshot(rect:)`) was removed so the project
+builds with the macOS 15 SDK — the pre-26 capture path it fell back to is used
+everywhere, with identical results on macOS ≤15.
 
 ## License
 
