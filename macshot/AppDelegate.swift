@@ -1,6 +1,5 @@
 import Cocoa
 import Carbon
-import Sparkle
 import ServiceManagement
 import UniformTypeIdentifiers
 import AVFoundation
@@ -191,15 +190,14 @@ private final class CaptureTimingTrace: @unchecked Sendable {
 }
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
     private var hudAppearanceObserver: HUDSystemAppearanceObserver?
-    private var updaterController: SPUStandardUpdaterController!
     private var overlayControllers: [OverlayWindowController] = []
     private var settingsController: SettingsWindowController?
     private var onboardingController: PermissionOnboardingController?
-    // Snapshot before Sparkle starts and can mark this as a previous launch.
+    // Snapshot before launch so onboarding can tell returning users apart.
     private let hasUsedMacshotBefore = PermissionOnboardingController.isReturningUser()
     private var pinControllers: [PinWindowController] = []
     private var thumbnailControllers: [FloatingThumbnailController] = []
@@ -318,11 +316,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         // something references ScreenshotHistory.shared.
         _ = ScreenshotHistory.shared
 
-        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
-        // Disable silent update downloads — updates should only apply
-        // via explicit user action ("Check for Updates..." / Install),
-        // so an automatic update can't be mistaken for a silent crash.
-        updaterController.updater.automaticallyDownloadsUpdates = false
         setupMainMenu()
         setupStatusBar()
         DistributedNotificationCenter.default().addObserver(
@@ -579,8 +572,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     /// If the app is running from a DMG volume or a translocated path,
-    /// offer to move it to /Applications for proper operation (auto-updates,
-    /// persistent preferences, no translocation issues).
+    /// offer to move it to /Applications for proper operation
+    /// (persistent preferences, no translocation issues).
     private func promptToMoveToApplicationsIfNeeded() {
         let bundlePath = Bundle.main.bundlePath
         let isOnDMG = bundlePath.hasPrefix("/Volumes/")
@@ -590,7 +583,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         let alert = NSAlert()
         alert.messageText = "Move to Applications folder?"
-        alert.informativeText = "\(BuildVariant.displayName) is running from a disk image. Move it to your Applications folder for auto-updates and best experience."
+        alert.informativeText = "\(BuildVariant.displayName) is running from a disk image. Move it to your Applications folder for the best experience."
         alert.addButton(withTitle: "Move to Applications")
         alert.addButton(withTitle: "Not Now")
         alert.showsSuppressionButton = true
@@ -993,11 +986,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         prefsItem.target = self
         prefsItem.image = NSImage(systemSymbolName: "gear", accessibilityDescription: nil)
         menu.addItem(prefsItem)
-
-        let updateItem = NSMenuItem(title: L("Check for Updates..."), action: #selector(checkForUpdates), keyEquivalent: "")
-        updateItem.target = self
-        updateItem.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
-        menu.addItem(updateItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -2784,19 +2772,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     // MARK: - Quit
 
-    @objc private func checkForUpdates() {
-        NSApp.activate(ignoringOtherApps: true)
-        updaterController.checkForUpdates(nil)
-    }
-
     @objc private func quitApp() {
         NSApp.terminate(nil)
-    }
-
-    // MARK: - SPUUpdaterDelegate
-
-    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-        UserDefaults.standard.bool(forKey: "betaUpdatesEnabled") ? ["beta"] : []
     }
 }
 

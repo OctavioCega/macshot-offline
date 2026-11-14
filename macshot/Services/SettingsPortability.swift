@@ -108,11 +108,9 @@ enum SettingsPortability {
         return true
     }
 
-    /// macshot-owned settings whose names don't fit the lowercase shape rule (e.g. the Sparkle
-    /// pref, which macshot deliberately reuses). Explicitly allowed so they still export.
-    static let forcedIncludeKeys: Set<String> = [
-        "SUEnableAutomaticChecks",
-    ]
+    /// macshot-owned settings whose names don't fit the lowercase shape rule.
+    /// Explicitly allowed so they still export.
+    static let forcedIncludeKeys: Set<String> = []
 
     /// Whether a key is safe to export/import.
     static func isPortable(_ key: String) -> Bool {

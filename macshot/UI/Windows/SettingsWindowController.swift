@@ -99,8 +99,6 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
     private var filenameTemplatePreview: NSTextField!
     private var recordingFilenameTemplateField: NSTextField!
     private var recordingFilenameTemplatePreview: NSTextField!
-    private var autoUpdateCheckbox: NSButton!
-    private var betaUpdateCheckbox: NSButton!
     private var accentColorWell: NSColorWell!
     private var iconColorWell: NSColorWell!
     private var bgColorWell: NSColorWell!
@@ -517,14 +515,6 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
         urlSchemeRow.alignment = .centerY
         stack.addArrangedSubview(indented(urlSchemeRow))
         stack.setCustomSpacing(6, after: stack.arrangedSubviews.last!)
-
-        autoUpdateCheckbox = NSButton(checkboxWithTitle: L("Check for updates automatically"), target: self, action: #selector(autoUpdateChanged(_:)))
-        stack.addArrangedSubview(indented(autoUpdateCheckbox))
-        stack.setCustomSpacing(4, after: stack.arrangedSubviews.last!)
-
-        betaUpdateCheckbox = NSButton(checkboxWithTitle: L("Check for beta updates"), target: self, action: #selector(betaUpdateChanged(_:)))
-        stack.addArrangedSubview(indented(betaUpdateCheckbox))
-        stack.setCustomSpacing(20, after: stack.arrangedSubviews.last!)
 
         // ── Appearance ───────────────────────────────────────
         stack.addArrangedSubview(sectionHeader(L("Appearance")))
@@ -1122,18 +1112,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
             stack.addArrangedSubview(sectionHeader(L("Translation")))
             stack.setCustomSpacing(10, after: stack.arrangedSubviews.last!)
 
-            let translationProviderPopup = NSPopUpButton()
-            translationProviderPopup.addItems(withTitles: [
-                L("Apple (on-device)"),
-                L("Google Translate"),
-            ])
-            translationProviderPopup.selectItem(at: TranslationService.provider == .apple ? 0 : 1)
-            translationProviderPopup.target = self
-            translationProviderPopup.action = #selector(translationProviderChanged(_:))
-            stack.addArrangedSubview(labeledRow(L("Engine:"), controls: [translationProviderPopup]))
-            stack.setCustomSpacing(4, after: stack.arrangedSubviews.last!)
-
-            let providerNote = NSTextField(wrappingLabelWithString: L("Apple translation is faster and works offline. Google Translate supports more languages."))
+            let providerNote = NSTextField(wrappingLabelWithString: L("Translation runs entirely on-device using Apple Translation."))
             providerNote.font = NSFont.systemFont(ofSize: 10)
             providerNote.textColor = .secondaryLabelColor
             stack.addArrangedSubview(indented(providerNote))
@@ -2318,7 +2297,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
         stack.setCustomSpacing(20, after: desc)
 
         #if OFFLINE
-        let offlineNote = NSTextField(wrappingLabelWithString: L("Offline build: upload and cloud storage integrations are removed. Update checks may still connect to MacShot's update server. Screenshots and recordings stay local unless you share or save them yourself."))
+        let offlineNote = NSTextField(wrappingLabelWithString: L("Offline build: upload, cloud storage, update checks and online translation are removed. This app cannot open network connections. Screenshots and recordings stay on this Mac."))
         offlineNote.font = NSFont.systemFont(ofSize: 12)
         offlineNote.textColor = .secondaryLabelColor
         offlineNote.alignment = .center
@@ -2829,11 +2808,6 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
         updateFilenamePreview()
         recordingFilenameTemplateField.stringValue = UserDefaults.standard.string(forKey: FilenameFormatter.recordingUserDefaultsKey) ?? FilenameFormatter.defaultRecordingTemplate
         updateRecordingFilenamePreview()
-
-        let autoUpdate = UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") as? Bool ?? true
-        autoUpdateCheckbox.state = autoUpdate ? .on : .off
-
-        betaUpdateCheckbox.state = UserDefaults.standard.bool(forKey: "betaUpdatesEnabled") ? .on : .off
 
         accentColorWell.color = ToolbarLayout.accentColor
         iconColorWell.color = ToolbarLayout.storedIconColor
@@ -3696,18 +3670,6 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
         let custom = menuBarIconModePopup.indexOfSelectedItem == 1
         menuBarIconSymbolField.isEnabled = custom
         menuBarIconPresetPopup.isEnabled = custom
-    }
-
-    @objc private func autoUpdateChanged(_ sender: NSButton) {
-        UserDefaults.standard.set(sender.state == .on, forKey: "SUEnableAutomaticChecks")
-    }
-
-    @objc private func betaUpdateChanged(_ sender: NSButton) {
-        UserDefaults.standard.set(sender.state == .on, forKey: "betaUpdatesEnabled")
-    }
-
-    @objc private func translationProviderChanged(_ sender: NSPopUpButton) {
-        TranslationService.provider = sender.indexOfSelectedItem == 0 ? .apple : .google
     }
 
     @objc private func openTranslationSettings() {

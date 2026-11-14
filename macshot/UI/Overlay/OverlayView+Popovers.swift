@@ -133,8 +133,8 @@ extension OverlayView {
             }
         }
 
-        // If Apple Translation is selected, check which languages are installed
-        if #available(macOS 15.0, *), TranslationService.provider == .apple {
+        // Only show language packs that are installed on-device
+        if #available(macOS 15.0, *) {
             TranslationService.checkAppleLanguageAvailability { availability in
                 showPopover(availability)
             }

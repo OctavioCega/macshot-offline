@@ -1,4 +1,13 @@
-# macshot
+# macshot Offline (fork)
+
+> **Fork notice:** this repo is an independent, network-free fork of
+> `sw33tLie/macshot` (GPLv3). It ships **only** the offline variant.
+> Sparkle, uploads, OAuth, telemetry and Google Translate were removed;
+> `com.apple.security.network.client` was dropped from the entitlements so the
+> sandbox blocks every outbound socket. Anything below describing Sparkle
+> updates, appcasts, signing/notarization or Homebrew publishing is **upstream
+> history** and does not apply here. This fork's only build workflow is
+> `.github/workflows/build-offline.yml` (unsigned/ad-hoc build + release).
 
 Native macOS screenshot & annotation tool inspired by Flameshot. Built with Swift + AppKit. No Qt, no Electron.
 
@@ -7,28 +16,21 @@ Native macOS screenshot & annotation tool inspired by Flameshot. Built with Swif
 - **Language:** Swift 5.0
 - **UI:** AppKit (all windows created in code, storyboard is minimal — just app entry + main menu)
 - **Min Target:** macOS 12.3+ (Monterey)
-- **Bundle ID:** com.sw33tlie.macshot.macshot
-- **Sandbox:** Enabled (entitlements: network.client, files.user-selected.read-write, files.bookmarks.app-scope)
+- **Bundle ID:** com.octaviocega.macshot.offline (override via `MACSHOT_BUNDLE_ID`)
+- **Sandbox:** Enabled (entitlements: files.user-selected.read-write, files.bookmarks.app-scope, device.camera, device.audio-input — **no network.client**)
 - **LSUIElement:** YES (menu bar only app, no dock icon — switches to `.regular` when editor windows are open)
 - **Permissions:** Screen Recording (Info.plist has Privacy - Screen Capture Usage Description)
 - **Xcode:** File system synchronized groups — just create .swift files in `macshot/` and Xcode picks them up automatically
 
-## Build Variants
+## Build Variant (this fork)
 
-macshot has two release variants:
+This fork builds **only** the offline variant:
 
-- **Normal:** product name `macshot`, bundle id `com.sw33tlie.macshot.macshot`, Sparkle feed `appcast.xml`, release asset `MacShot.dmg`.
-- **Offline:** product name `macshot Offline`, bundle id `com.sw33tlie.macshot.offline`, Sparkle feed `appcast-offline.xml`, release asset `MacShot-Offline.dmg`.
+- **Offline:** product name `macshot Offline`, bundle id `com.octaviocega.macshot.offline`, release asset `macshot-Offline.dmg`. **No Sparkle feed — updates do not exist.**
 
 The offline build is selected with the `OFFLINE` Swift compilation condition. Use `BuildVariant.isOffline` / `BuildVariant.displayName` for runtime variant checks and display names. Upload and cloud storage integrations must be compiled out of the offline build with `#if !OFFLINE`, including upload UI, upload shortcuts, upload settings, upload context menu items, and uploader implementations.
 
 The variant's bundle ID and product name come from the project-level `MACSHOT_BUNDLE_ID` and `MACSHOT_PRODUCT_NAME` settings; override those, never `PRODUCT_BUNDLE_IDENTIFIER`/`PRODUCT_NAME`, on the command line. Command-line settings apply to every target, and the embedded OCR service derives its own ID (`$(MACSHOT_BUNDLE_ID).ocr`) and keeps its own product name.
-
-The release workflow builds both variants from the same tag. It patches the offline app's `SUFeedURL` to `appcast-offline.xml`, removes the Google OAuth URL scheme from the offline app, signs both apps, packages both DMGs, notarizes both DMGs, and writes both appcasts. Do not point the offline app at the normal appcast or vice versa; Sparkle updates must stay variant-specific so offline users never update into the normal app.
-
-Beta handling is shared: beta items get `<sparkle:channel>beta</sparkle:channel>`, and users opt in through the existing "Check for beta updates" setting. Stable offline releases will appear to offline users through `appcast-offline.xml` once a stable offline item exists.
-
-Homebrew status: beta releases skip Homebrew. Stable releases update the normal cask and generate `macshot-offline` in the personal tap. The official Homebrew cask remains normal-only unless a separate `macshot-offline` cask is submitted later.
 
 ## Architecture
 

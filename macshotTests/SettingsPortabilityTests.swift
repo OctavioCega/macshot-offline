@@ -97,11 +97,6 @@ final class SettingsPortabilityTests: XCTestCase {
         }
     }
 
-    func testTheSparkleKeyIsForcedThroughDespiteItsShape() {
-        XCTAssertTrue(SettingsPortability.isPortable("SUEnableAutomaticChecks"),
-                      "macshot owns this pref even though it isn't lowercase")
-    }
-
     // MARK: - Import validation
 
     func testImportRejectsNonJSON() {

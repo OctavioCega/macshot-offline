@@ -1,0 +1,138 @@
+name: Build Offline Release
+
+# Builds ONLY the offline variant, unsigned + ad-hoc signed.
+# No Sparkle, no uploads, no Google Translate, no network.client entitlement.
+# Push a tag (v*.*.*) to also publish a GitHub Release with the DMG.
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create releases on tag push
+
+jobs:
+  build:
+    runs-on: macos-26        # Xcode 26 + macOS 26 SDK (NSGlassEffectView / Liquid Glass)
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XC" ]; then XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1); fi
+          echo "Using $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('macshot.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      - name: Resolve SPM packages
+        run: |
+          xcodebuild \
+            -project macshot.xcodeproj \
+            -scheme macshot \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            -resolvePackageDependencies
+
+      - name: Build offline app
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ "$VERSION" = "main" ] && VERSION="0.0.0-dev"
+          xcodebuild \
+            -project macshot.xcodeproj \
+            -scheme macshot \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="$VERSION" \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS="OFFLINE" \
+            MACSHOT_BUNDLE_ID="com.octaviocega.macshot.offline" \
+            MACSHOT_PRODUCT_NAME="macshot Offline" \
+            INFOPLIST_KEY_CFBundleDisplayName="macshot Offline" \
+            INFOPLIST_KEY_CFBundleName="macshot Offline" \
+            build
+
+      # Ad-hoc signature: gives the binary a stable identity so TCC grants
+      # (Screen Recording, etc.) survive relaunches. No Apple Developer
+      # account needed; Gatekeeper still requires right-click → Open once.
+      - name: Ad-hoc sign
+        run: |
+          APP="build/Build/Products/Release/macshot Offline.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose "$APP"
+
+      # Hard gate: prove the binary cannot initiate network connections.
+      - name: Verify offline guarantees
+        run: |
+          set -e
+          APP="build/Build/Products/Release/macshot Offline.app"
+          BIN="$APP/Contents/MacOS/$(defaults read "$PWD/$APP/Contents/Info" CFBundleExecutable)"
+
+          echo "── 1. Entitlements: network.client must be absent"
+          codesign -d --entitlements :- "$APP" > /tmp/ents.plist 2>/dev/null
+          if /usr/libexec/PlistBuddy -c "Print :com.apple.security.network.client" /tmp/ents.plist 2>/dev/null; then
+            echo "::error::network.client entitlement present — build is NOT network-isolated"; exit 1
+          fi
+          /usr/libexec/PlistBuddy -c "Print :com.apple.security.app-sandbox" /tmp/ents.plist
+
+          echo "── 2. No Sparkle framework embedded or linked"
+          [ ! -d "$APP/Contents/Frameworks/Sparkle.framework" ] || { echo "::error::Sparkle.framework embedded"; exit 1; }
+          ! otool -L "$BIN" | grep -i sparkle || { echo "::error::Sparkle still linked"; exit 1; }
+
+          echo "── 3. Info.plist: no Sparkle keys, no OAuth URL scheme"
+          ! /usr/libexec/PlistBuddy -c "Print :SUFeedURL" "$APP/Contents/Info.plist" 2>/dev/null || { echo "::error::SUFeedURL present"; exit 1; }
+          ! /usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$APP/Contents/Info.plist" 2>/dev/null || { echo "::error::SUPublicEDKey present"; exit 1; }
+          ! plutil -extract CFBundleURLTypes json -o - "$APP/Contents/Info.plist" | grep -i "google" || { echo "::error::Google OAuth URL scheme present"; exit 1; }
+
+          echo "── 4. Binary strings: no upload/translate endpoints"
+          ! strings "$BIN" | grep -Ei "translate\.googleapis|imgbb\.com|amazonaws\.com|googleapis\.com/o/oauth|appcast" || { echo "::error::network endpoints found in binary"; exit 1; }
+
+          echo "── 5. XPC service has no network entitlement either"
+          XPC=$(ls -d "$APP/Contents/XPCServices/"*.xpc | head -1)
+          codesign -d --entitlements :- "$XPC" > /tmp/xpc-ents.plist 2>/dev/null || true
+          ! /usr/libexec/PlistBuddy -c "Print :com.apple.security.network.client" /tmp/xpc-ents.plist 2>/dev/null || { echo "::error::XPC service has network.client"; exit 1; }
+
+          echo "All offline guarantees verified."
+
+      - name: Package DMG
+        run: |
+          hdiutil create -volname "macshot Offline" \
+            -srcfolder "build/Build/Products/Release/macshot Offline.app" \
+            -ov -format UDZO "macshot-Offline.dmg"
+          shasum -a 256 macshot-Offline.dmg | tee SHA256.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macshot-Offline
+          path: |
+            macshot-Offline.dmg
+            SHA256.txt
+          retention-days: 30
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            macshot-Offline.dmg SHA256.txt \
+            --title "${GITHUB_REF_NAME} — Offline build" \
+            --notes "Unsigned offline build of macshot (no Sparkle, no uploads, no Google Translate, no network.client entitlement). See README for install notes (right-click → Open on first launch) and the audit checklist."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
