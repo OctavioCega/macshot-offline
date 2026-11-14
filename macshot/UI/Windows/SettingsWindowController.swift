@@ -109,6 +109,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
     private var quickModePopup: NSPopUpButton!
     private var quickCaptureOpenEditorCheckbox: NSButton!
     private var openEditorAfterSelectionCheckbox: NSButton!
+    private var autoConfirmOnReleaseCheckbox: NSButton!
     private var closeEditorAfterCopyCheckbox: NSButton!
     private var imageFormatPopup: NSPopUpButton!
     private var clipboardFormatCheckbox: NSButton!
@@ -806,6 +807,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
 
         // Checkboxes
         openEditorAfterSelectionCheckbox = NSButton(checkboxWithTitle: L("Open in Editor right after selection"), target: self, action: #selector(openEditorAfterSelectionChanged(_:)))
+        autoConfirmOnReleaseCheckbox = NSButton(checkboxWithTitle: L("Capture on release — hold Control for the toolbar"), target: self, action: #selector(autoConfirmOnReleaseChanged(_:)))
         copySoundCheckbox = NSButton(checkboxWithTitle: L("Play sound on capture"), target: self, action: #selector(copySoundChanged(_:)))
         rememberToolCheckbox = NSButton(checkboxWithTitle: L("Remember last selected tool"), target: self, action: #selector(rememberToolChanged(_:)))
         startCapturesInMoveModeCheckbox = NSButton(checkboxWithTitle: L("Start captures in move mode"), target: self, action: #selector(startCapturesInMoveModeChanged(_:)))
@@ -834,7 +836,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
         filenameTemplatePreview.textColor = .secondaryLabelColor
         filenameTemplatePreview.lineBreakMode = .byTruncatingMiddle
 
-        for cb in [openEditorAfterSelectionCheckbox!, copySoundCheckbox!, startCapturesInMoveModeCheckbox!, rememberToolCheckbox!, thumbnailCheckbox!] {
+        for cb in [openEditorAfterSelectionCheckbox!, autoConfirmOnReleaseCheckbox!, copySoundCheckbox!, startCapturesInMoveModeCheckbox!, rememberToolCheckbox!, thumbnailCheckbox!] {
             stack.addArrangedSubview(indented(cb))
             stack.setCustomSpacing(6, after: stack.arrangedSubviews.last!)
         }
@@ -2838,6 +2840,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
             quickModePopup.itemArray.first { $0.representedObject as? Int == quickMode.rawValue })
         quickCaptureOpenEditorCheckbox.state = UserDefaults.standard.bool(forKey: "quickCaptureOpenEditor") ? .on : .off
         openEditorAfterSelectionCheckbox.state = UserDefaults.standard.bool(forKey: "openEditorAfterSelection") ? .on : .off
+        autoConfirmOnReleaseCheckbox.state = (UserDefaults.standard.object(forKey: "autoConfirmOnRelease") as? Bool ?? true) ? .on : .off
         closeEditorAfterCopyCheckbox.state = UserDefaults.standard.bool(forKey: "closeEditorAfterCopy") ? .on : .off
 
         selectImageFormat(ImageEncoder.format)
@@ -3019,6 +3022,9 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSWindowD
     }
     @objc private func openEditorAfterSelectionChanged(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: "openEditorAfterSelection")
+    }
+    @objc private func autoConfirmOnReleaseChanged(_ sender: NSButton) {
+        UserDefaults.standard.set(sender.state == .on, forKey: "autoConfirmOnRelease")
     }
     @objc private func closeEditorAfterCopyChanged(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: "closeEditorAfterCopy")
